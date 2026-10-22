@@ -1,4 +1,3 @@
-"""Логика домашки: статус, форматирование, пороги напоминаний."""
 import re
 import time
 from sqlite3 import Row
@@ -30,7 +29,6 @@ def fmt_hw(h: Row, n: int | None = None) -> str:
 
 
 def mark_passed_reminders(db: Database, uid: int, hw_id: int, deadline: int | None) -> None:
-    """Чтобы сразу после добавления не прилетели напоминания, время которых уже прошло."""
     if not deadline:
         return
     hours = parse_hours(db.user(uid)["remind_hours"])
@@ -52,7 +50,6 @@ def parse_hours(text: str) -> list[float]:
 
 
 def plural(n: int, one: str, few: str, many: str) -> str:
-    """plural(2, "день", "дня", "дней") → «дня»."""
     if n % 10 == 1 and n % 100 != 11:
         return one
     if 2 <= n % 10 <= 4 and not 12 <= n % 100 <= 14:
@@ -61,7 +58,6 @@ def plural(n: int, one: str, few: str, many: str) -> str:
 
 
 def fmt_hours(h: float) -> str:
-    """Порог напоминания по-человечески: 24 → «за сутки», 48 → «за 2 дня», 3 → «за 3 ч», 0.5 → «за 30 мин»."""
     if h < 1:
         return f"за {round(h * 60)} мин"
     if h % 24 == 0:
