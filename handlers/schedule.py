@@ -72,28 +72,58 @@ async def nav_week(callback: CallbackQuery, callback_data: WeekCb, db: Database,
 ADD_LESSON_RE = re.compile(r"(\S+)\s+(\d{1,2}:\d{2})\s*[-–—]\s*(\d{1,2}:\d{2})\s+(.+)")
 
 
-@router.message(Command("addlesson"))
-async def add_lesson(message: Message, command: CommandObject, db: Database):
-    usage = ("Формат:\n<code>/addlesson пн 10:00-11:20 Английский @ 305</code> — каждую неделю\n"
-             "<code>/addlesson 25.10 18:00-19:30 Консультация</code> — один раз")
-    m = ADD_LESSON_RE.fullmatch((command.args or "").strip())
+ADD_LESSON_USAGE = (
+    "Формат:\n<code>/addlesson пн 10:00-11:20 Английский @ 305</code> — каждую неделю\n"
+    "<code>/addlesson 25.10 18:00-19:30 Консультация</code> — один раз\n\n"
+    "Можно сразу много пар: каждая с новой строки в одном сообщении."
+)
+
+
+def parse_lesson_line(line: str):
+    """«пн 10:00-11:20 Английский @ 305» → (weekday, day, from, to, title, room) или текст ошибки."""
+    m = ADD_LESSON_RE.fullmatch(line)
     if not m:
-        return await message.answer(usage)
+        return "не понял формат"
     day_tok, t_from, t_to, rest = m.groups()
     t_from, t_to = parse_hhmm(t_from), parse_hhmm(t_to)
     if not t_from or not t_to or t_from >= t_to:
-        return await message.answer("Время кривое. " + usage)
+        return "кривое время"
     title, _, room = rest.partition("@")
     title, room = title.strip(), room.strip()
-
+    if not title:
+        return "нет названия"
     weekday = parse_weekday(day_tok)
     one_day = None if weekday is not None else parse_date(day_tok, today())
     if weekday is None and one_day is None:
-        return await message.answer("Не понял день. " + usage)
+        return "не понял день"
+    return weekday, one_day.isoformat() if one_day else None, t_from, t_to, title, room
 
-    db.add_lesson(message.from_user.id, weekday, one_day.isoformat() if one_day else None, t_from, t_to, title, room)
-    when = f"каждый {WD_SHORT[weekday]}" if weekday is not None else one_day.strftime("%d.%m.%Y")
-    await message.answer(f"✍️ Добавил: <b>{q(title)}</b>, {when} {t_from}–{t_to}" + (f", {q(room)}" if room else ""))
+
+@router.message(Command("addlesson"))
+async def add_lesson(message: Message, command: CommandObject, db: Database):
+    # одна пара на строку; если вставили список команд целиком — «/addlesson» в начале строк убираем
+    lines = [line.strip().removeprefix("/addlesson").strip() for line in (command.args or "").splitlines()]
+    lines = [line for line in lines if line]
+    if not lines:
+        return await message.answer(ADD_LESSON_USAGE)
+
+    added, errors = [], []
+    for line in lines:
+        parsed = parse_lesson_line(line)
+        if isinstance(parsed, str):
+            errors.append(f"• <code>{q(line)}</code> — {parsed}")
+            continue
+        weekday, day, t_from, t_to, title, room = parsed
+        db.add_lesson(message.from_user.id, weekday, day, t_from, t_to, title, room)
+        when = f"каждый {WD_SHORT[weekday]}" if weekday is not None else date.fromisoformat(day).strftime("%d.%m.%Y")
+        added.append(f"• <b>{q(title)}</b>, {when} {t_from}–{t_to}" + (f", {q(room)}" if room else ""))
+
+    parts = []
+    if added:
+        parts.append(f"✍️ Добавил ({len(added)}):\n" + "\n".join(added))
+    if errors:
+        parts.append(f"⚠️ Не добавил ({len(errors)}):\n" + "\n".join(errors) + "\n\n" + ADD_LESSON_USAGE)
+    await message.answer("\n\n".join(parts))
 
 
 def lessons_view(db: Database, uid: int):

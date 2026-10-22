@@ -31,7 +31,7 @@ async def day_text(db: Database, ruz: Ruz, uid: int, d: date) -> str:
     lines = [title, ""]
     if lessons[d]:
         lines += [fmt_lesson(lesson) for lesson in lessons[d]]
-    elif db.user(uid)["ruz_id"] or db.lessons_all(uid):
+    elif db.user(uid)["ruz_kind"] or db.lessons_all(uid):
         lines.append("Пар нет 🎉")
     else:
         lines.append("Расписание не подключено. ⚙️ Настройки → «Группа RUZ» или /addlesson")
@@ -67,4 +67,3 @@ async def week_text(db: Database, ruz: Ruz, uid: int, monday: date) -> str:
     if warning:
         lines += ["", warning]
     return "\n".join(lines)
-
