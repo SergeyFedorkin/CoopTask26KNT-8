@@ -13,7 +13,8 @@ HELP = """<b>📒 Бот-дневник</b>
 
 <b>Расписание</b>
 /today, /tomorrow, /week — пары (RUZ + твои ручные)
-/group БПИ251 — подключить группу из RUZ (или email @edu.hse.ru — личное расписание с английским/майнором)
+/group 26КНТ-8 — подключить группу. Если RUZ недоступен (он открыт только из сети ВШЭ), бот возьмёт пары из таблицы факультета
+/sheet 26КНТ-8 — сразу брать расписание из Google-таблицы факультета
 /addlesson пн 10:00-11:20 Английский @ 305 — еженедельная пара
 /addlesson 25.10 18:00-19:30 Консультация — разовая
 /lessons — список ручных пар
@@ -41,8 +42,8 @@ async def start(message: Message, db: Database, state: FSMContext):
     await state.clear()
     user = db.user(message.from_user.id)
     text = f"Привет, {message.from_user.first_name}! Я твой дневник: расписание, домашка, дедлайны, оценки.\n\n"
-    if not user["ruz_id"]:
-        text += "Для начала подключи расписание: пришли /group и название группы (например, <code>/group БПИ251</code>).\n\n"
+    if not user["ruz_kind"]:
+        text += "Для начала подключи расписание: пришли /group и название группы (например, <code>/group 26КНТ-8</code>).\n\n"
     await message.answer(text + "Все команды — /help", reply_markup=main_kb)
 
 

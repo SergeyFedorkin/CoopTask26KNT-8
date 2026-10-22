@@ -7,9 +7,11 @@ from aiogram.types import CallbackQuery, Message
 from db import Database
 from handlers.schedule import lessons_view
 from handlers.tools import edit
-from homework_logic import parse_hours
+from homework_logic import fmt_hours, parse_hours
 from keyboards import BTN_SETTINGS, TEXT_INPUT, PickCb, SetCb, main_kb, pick_kb, settings_kb
+import sheet
 from ruz import Ruz, RuzError
+from sheet import SheetError
 from utils import fmt_num, now, parse_hhmm, q
 
 router = Router()
@@ -21,18 +23,22 @@ class SetState(StatesGroup):
     remind = State()
 
 
+SOURCE_LABEL = {"group": "группа RUZ", "student": "личное RUZ", "sheet": "таблица факультета"}
+
+
 def _settings_view(db: Database, uid: int):
     u = db.user(uid)
-    group = f"{q(u['ruz_label'])} ({'группа' if u['ruz_kind'] == 'group' else 'личное'})" if u["ruz_id"] else "не подключено"
+    kind = u["ruz_kind"]
+    group = f"{q(u['ruz_label'])} ({SOURCE_LABEL.get(kind, kind)})" if kind else "не подключено"
     hours = parse_hours(u["remind_hours"])
-    remind = ", ".join(f"{fmt_num(h)} ч" for h in hours) if hours else "выключены"
+    remind = ", ".join(fmt_hours(h) for h in hours) + " до срока" if hours else "выключены"
     text = (
         "⚙️ <b>Настройки</b>\n\n"
-        f"👥 Расписание RUZ: <b>{group}</b>\n"
+        f"👥 Расписание: <b>{group}</b>\n"
         f"☀️ Утренняя сводка: <b>{u['summary_time']}</b>, {'вкл' if u['summary_on'] else 'выкл'}\n"
-        f"🔔 Напоминания о дедлайнах: за <b>{remind}</b>"
+        f"🔔 Напоминания о дедлайнах: <b>{remind}</b>"
     )
-    return text, settings_kb(bool(u["ruz_id"]), bool(u["summary_on"]))
+    return text, settings_kb(bool(kind), bool(u["summary_on"]))
 
 
 @router.message(Command("settings"))
@@ -43,29 +49,51 @@ async def show_settings(message: Message, db: Database, state: FSMContext):
     await message.answer(text, reply_markup=markup)
 
 
-# ---------------- группа RUZ ----------------
-async def _search_group(message: Message, ruz: Ruz, state: FSMContext, term: str):
+# ---------------- источник расписания: RUZ или таблица факультета ----------------
+async def _connect_sheet(message: Message, db: Database, state: FSMContext, term: str, lead: str) -> bool:
+    """Подключить группу из Google-таблицы факультета. True — получилось."""
+    try:
+        name = await sheet.find_group(term)
+    except SheetError:
+        return False
+    if not name:
+        return False
+    db.update_user(message.from_user.id, ruz_kind="sheet", ruz_id=None, ruz_label=name)
+    await state.clear()
+    await message.answer(f"📋 {lead}: <b>{q(name)}</b>\nСмотри 📅 Сегодня или 🗓 Неделя.", reply_markup=main_kb)
+    return True
+
+
+async def _search_group(message: Message, db: Database, ruz: Ruz, state: FSMContext, term: str):
     await message.bot.send_chat_action(message.chat.id, "typing")
     try:
         found = await ruz.search(term)
     except RuzError as e:
+        lead = "RUZ сейчас недоступен, поэтому подключил расписание из таблицы факультета"
+        if "@" not in term and await _connect_sheet(message, db, state, term, lead):
+            return
         await state.clear()
+        hint = "" if "@" in term else f"В таблице факультета группы «{q(term)}» тоже нет — проверь название.\n"
         return await message.answer(
-            f"⚠️ RUZ не отвечает ({q(str(e))}).\n"
-            "Попробуй позже или добавь пары вручную: /addlesson", reply_markup=main_kb)
-    await state.set_state(SetState.group)
+            f"⚠️ RUZ не отвечает ({q(str(e))}).\n{hint}"
+            "Можно добавить пары вручную: /addlesson", reply_markup=main_kb)
     if not found:
+        lead = "В RUZ такой группы нет, зато она есть в таблице факультета — подключил"
+        if "@" not in term and await _connect_sheet(message, db, state, term, lead):
+            return
+        await state.set_state(SetState.group)
         return await message.answer("Ничего не нашёл 🤷 Попробуй иначе (например, <code>БПИ251</code>) или /cancel")
+    await state.set_state(SetState.group)
     await state.update_data(found=found)
     labels = [f"{f['label']} · {f['description']}"[:60] if f["description"] else f["label"] for f in found]
     await message.answer("Выбери:", reply_markup=pick_kb("group", labels, per_row=1))
 
 
 @router.message(Command("group"))
-async def group_cmd(message: Message, command: CommandObject, ruz: Ruz, state: FSMContext):
+async def group_cmd(message: Message, command: CommandObject, db: Database, ruz: Ruz, state: FSMContext):
     await state.clear()
     if command.args:
-        return await _search_group(message, ruz, state, command.args.strip())
+        return await _search_group(message, db, ruz, state, command.args.strip())
     await state.set_state(SetState.group)
     await message.answer("Напиши название группы (например, <code>БПИ251</code>)\n"
                          "или корпоративную почту <code>…@edu.hse.ru</code> — тогда будет личное расписание "
@@ -81,8 +109,26 @@ async def group_btn(callback: CallbackQuery, state: FSMContext):
 
 
 @router.message(SetState.group, TEXT_INPUT)
-async def group_typed(message: Message, ruz: Ruz, state: FSMContext):
-    await _search_group(message, ruz, state, message.text.strip())
+async def group_typed(message: Message, db: Database, ruz: Ruz, state: FSMContext):
+    await _search_group(message, db, ruz, state, message.text.strip())
+
+
+@router.message(Command("sheet"))
+async def sheet_cmd(message: Message, command: CommandObject, db: Database, state: FSMContext):
+    await state.clear()
+    if not command.args:
+        return await message.answer("Формат: <code>/sheet 26КНТ-8</code> — расписание из Google-таблицы факультета "
+                                    "(работает и вне сети ВШЭ)")
+    await message.bot.send_chat_action(message.chat.id, "typing")
+    try:
+        name = await sheet.find_group(command.args.strip())
+    except SheetError as e:
+        return await message.answer(f"⚠️ {q(str(e))}")
+    if not name:
+        return await message.answer("Такой группы в таблице нет. Проверь написание, например <code>26КНТ-8</code>")
+    db.update_user(message.from_user.id, ruz_kind="sheet", ruz_id=None, ruz_label=name)
+    await message.answer(f"📋 Подключил расписание из таблицы факультета: <b>{q(name)}</b>\n"
+                         "Смотри 📅 Сегодня или 🗓 Неделя.", reply_markup=main_kb)
 
 
 @router.callback_query(SetState.group, PickCb.filter(F.what == "group"))
@@ -166,7 +212,7 @@ def _apply_remind(db: Database, uid: int, raw: str) -> str | None:
     if not hours:
         return None
     db.update_user(uid, remind_hours=",".join(fmt_num(h) for h in hours))
-    return "🔔 Буду напоминать за " + ", ".join(f"{fmt_num(h)} ч" for h in hours) + " до дедлайна."
+    return "🔔 Буду напоминать " + ", ".join(fmt_hours(h) for h in hours) + " до дедлайна."
 
 
 @router.message(Command("remind"))
