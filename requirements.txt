@@ -1,0 +1,4 @@
+aiogram==3.31.0
+openpyxl  
+aiohttp-socks  
+tzdata  
