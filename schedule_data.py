@@ -4,6 +4,7 @@ from dataclasses import asdict
 from datetime import date, datetime, timedelta
 
 from db import Database
+import sheet
 from ruz import Lesson, Ruz, RuzError
 from utils import at, now, q, today
 
@@ -17,8 +18,10 @@ async def get_lessons(db: Database, ruz: Ruz, uid: int, start: date, end: date) 
     result: dict[date, list[Lesson]] = {d: [] for d in days}
     warning = None
 
-    if user["ruz_id"]:
-        source = f"{user['ruz_kind']}:{user['ruz_id']}"
+    if user["ruz_kind"]:
+        # источник: RUZ (группа/студент) или Google-таблица факультета ("sheet", группа в ruz_label)
+        is_sheet = user["ruz_kind"] == "sheet"
+        source = f"sheet:{user['ruz_label']}" if is_sheet else f"{user['ruz_kind']}:{user['ruz_id']}"
         keys = [d.isoformat() for d in days]
         cached = db.cache_get(source, keys)
         fresh = all(k in cached and time.time() - cached[k][1] < CACHE_TTL for k in keys)
@@ -27,10 +30,14 @@ async def get_lessons(db: Database, ruz: Ruz, uid: int, start: date, end: date) 
             ws = start - timedelta(days=start.weekday())
             we = end + timedelta(days=6 - end.weekday())
             try:
-                lessons = await ruz.schedule(user["ruz_kind"], user["ruz_id"], ws, we)
+                if is_sheet:
+                    lessons = await sheet.schedule(user["ruz_label"], ws, we)
+                else:
+                    lessons = await ruz.schedule(user["ruz_kind"], user["ruz_id"], ws, we)
             except RuzError as e:
-                warning = ("⚠️ RUZ сейчас недоступен, показываю сохранённое расписание" if cached
-                           else f"⚠️ RUZ недоступен: {q(str(e))}")
+                name = "Таблица расписания" if is_sheet else "RUZ"
+                warning = (f"⚠️ {name} сейчас недоступен, показываю сохранённое расписание" if cached
+                           else f"⚠️ {name} недоступен: {q(str(e))}")
             else:
                 by_day = {(ws + timedelta(days=i)).isoformat(): [] for i in range((we - ws).days + 1)}
                 for lesson in lessons:

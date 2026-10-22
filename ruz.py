@@ -6,6 +6,7 @@ from datetime import date
 import aiohttp
 
 BASE_URL = "https://ruz.hse.ru/api"
+OUTSIDE_HSE_NETWORK = "доступ только из сети ВШЭ — подключись к Wi‑Fi университета"
 
 
 @dataclass
@@ -56,9 +57,19 @@ class Ruz:
 
     async def _get(self, path: str, params: dict) -> list:
         try:
-            async with self._session.get(BASE_URL + path, params=params, proxy=self.proxy, ssl=self.ssl) as r:
+            async with self._session.get(
+                BASE_URL + path, params=params, proxy=self.proxy, ssl=self.ssl, allow_redirects=False
+            ) as r:
+                if r.status in (301, 302, 303, 307, 308):
+                    # вне сети ВШЭ RUZ перекидывает на страницу www.hse.ru/eduland/schedule/
+                    location = r.headers.get("Location", "")
+                    if "eduland" in location:
+                        raise RuzError(OUTSIDE_HSE_NETWORK)
+                    raise RuzError(f"сервер перенаправляет на {location or 'другой адрес'}")
                 if r.status != 200:
                     raise RuzError(f"HTTP {r.status}")
+                if "json" not in r.content_type:
+                    raise RuzError("сервер вернул веб-страницу вместо расписания")
                 data = await r.json(content_type=None)
         except (aiohttp.ClientError, asyncio.TimeoutError, ValueError) as e:
             raise RuzError(str(e) or type(e).__name__) from e
