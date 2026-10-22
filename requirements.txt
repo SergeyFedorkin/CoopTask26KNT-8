@@ -1,0 +1,3 @@
+aiogram==3.31.0
+aiohttp-socks  # прокси/туннель для Telegram (TG_PROXY)
+tzdata  # часовые пояса на Windows
