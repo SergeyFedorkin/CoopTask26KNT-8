@@ -29,7 +29,6 @@ class AddHw(StatesGroup):
 
 
 def _canonical(subject: str, candidates: list[str]) -> str:
-    """«англ» → «Английский язык», если совпадение однозначное."""
     found = match_name(subject, candidates)
     return found[0] if len(found) == 1 else subject
 
@@ -48,9 +47,7 @@ def _save(db: Database, uid: int, subject: str, text: str, deadline: datetime | 
         elif all_hours:
             reply += "\n\n🔔 До срока совсем мало времени, отдельного напоминания не будет."
     return reply
-
-
-# ---------------- добавление ----------------
+    
 async def _start_add(message: Message, db: Database, ruz: Ruz, state: FSMContext):
     await message.bot.send_chat_action(message.chat.id, "typing")
     subjects = await subject_candidates(db, ruz, message.from_user.id)
@@ -67,8 +64,7 @@ async def add_cmd(message: Message, command: CommandObject, db: Database, ruz: R
     await state.clear()
     if not command.args:
         return await _start_add(message, db, ruz, state)
-
-    # быстрый режим: /add предмет; задание; срок
+        
     parts = [p.strip() for p in re.split(r"[;|]", command.args)]
     if len(parts) < 2 or not parts[0] or not parts[1]:
         return await message.answer("Формат: <code>/add матан; №1.2–1.5; пт 18:00</code> (срок можно не писать)")
@@ -87,17 +83,14 @@ async def add_cmd(message: Message, command: CommandObject, db: Database, ruz: R
                 return await message.answer("Не понял срок. Примеры: <code>завтра</code>, <code>пт 18:00</code>, "
                                             "<code>25.10</code>, <code>+3</code>, <code>пара</code>")
     await message.answer(_save(db, uid, subject, parts[1], deadline))
-
-
+    
 @router.message(F.text == BTN_ADD_HW)
 async def add_btn(message: Message, db: Database, ruz: Ruz, state: FSMContext):
     await state.clear()
     await _start_add(message, db, ruz, state)
 
-
 async def _ask_text(message: Message, subject: str):
     await message.answer(f"📚 <b>{q(subject)}</b>\n\n✏️ Что задали?")
-
 
 @router.callback_query(AddHw.subject, PickCb.filter(F.what == "subject"))
 async def pick_subject(callback: CallbackQuery, callback_data: PickCb, state: FSMContext):
@@ -173,8 +166,6 @@ async def type_deadline(message: Message, db: Database, ruz: Ruz, state: FSMCont
     await state.clear()
     await message.answer(_save(db, uid, data["subject"], data["text"], deadline), reply_markup=main_kb)
 
-
-# ---------------- список ----------------
 def _render_active(db: Database, uid: int, delete_mode: bool = False):
     rows = db.hw_active(uid)
     if not rows:
