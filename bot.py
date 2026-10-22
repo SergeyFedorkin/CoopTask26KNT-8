@@ -44,14 +44,13 @@ async def main() -> None:
     ruz = Ruz(settings.ruz_proxy, settings.ruz_verify_ssl)
     await ruz.start()
 
-    # db и ruz автоматически попадают в хендлеры по имени аргумента
     dp = Dispatcher(storage=MemoryStorage(), db=db, ruz=ruz)
     if settings.allowed_users:
         dp.message.filter(F.from_user.id.in_(settings.allowed_users))
         dp.callback_query.filter(F.from_user.id.in_(settings.allowed_users))
     dp.include_routers(
         common.router, schedule.router, homework.router, grades.router, settings_handlers.router,
-        common.fallback,   # «не понял» — строго последним
+        common.fallback,   
     )
 
     background = asyncio.create_task(scheduler.run(bot, db, ruz))
