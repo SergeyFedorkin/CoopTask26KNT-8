@@ -1,3 +1,4 @@
 aiogram==3.31.0
+openpyxl  # чтение Google-таблицы с расписанием (.xlsx)
 aiohttp-socks  # прокси/туннель для Telegram (TG_PROXY)
 tzdata  # часовые пояса на Windows

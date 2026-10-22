@@ -4,6 +4,8 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 BASE_DIR = Path(__file__).resolve().parent
+# Google-таблица расписания факультета ИМиКН (1 модуль). Новый модуль — новая ссылка в .env (SHEET_URL)
+DEFAULT_SHEET_URL = "https://docs.google.com/spreadsheets/d/1GyQ6IklpcoT7Sir6C7rNU9aNErDX1HWBg7Y1EK5T-nA"
 
 
 def _load_env(path: Path) -> None:
@@ -27,6 +29,7 @@ class Settings:
     ruz_proxy: str | None
     ruz_verify_ssl: bool
     allowed_users: frozenset[int]
+    sheet_url: str
 
 
 def _load() -> Settings:
@@ -40,6 +43,7 @@ def _load() -> Settings:
         ruz_proxy=os.getenv("RUZ_PROXY") or None,
         ruz_verify_ssl=os.getenv("RUZ_VERIFY_SSL", "1") != "0",
         allowed_users=frozenset(int(u) for u in users.replace(" ", "").split(",") if u),
+        sheet_url=os.getenv("SHEET_URL", DEFAULT_SHEET_URL),
     )
 
 
