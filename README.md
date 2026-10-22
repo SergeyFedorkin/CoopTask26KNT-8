@@ -4,21 +4,6 @@
 
 Расписание из RUZ ВШЭ + ручные пары, ДЗ с дедлайнами и напоминаниями, утренняя сводка, оценки и накоп.
 
-## Запуск
-
-1. В Telegram у [@BotFather](https://t.me/BotFather): `/newbot` и скопируй токен.
-2. Установи зависимости:
-   ```bash
-   cd diary_bot
-   python -m venv venv
-   venv\Scripts\activate          # Windows  (Linux/Mac: source venv/bin/activate)
-   pip install -r requirements.txt
-   ```
-3. Скопируй `.env.example` в `.env` и вставь `BOT_TOKEN`. В `ALLOWED_USERS` впиши свой ID (узнать его можно у @userinfobot), чтобы ботом не пользовались чужие.
-4. `python bot.py`
-5. В боте: `/start`, потом `/group БПИ251` (или своя почта `…@edu.hse.ru`, тогда подтянется личное расписание с английским и майнором).
-
-База `diary.db` создаётся сама рядом с `bot.py`.
 
 ## Что умеет
 
