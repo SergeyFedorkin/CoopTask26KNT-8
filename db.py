@@ -71,11 +71,6 @@ USER_FIELDS = {"ruz_kind", "ruz_id", "ruz_label", "summary_time", "summary_on", 
 
 
 class Database:
-    """
-    Синхронный sqlite3: запросы к локальной базе занимают микросекунды,
-    поэтому для личного бота это проще и не тормозит event loop.
-    """
-
     def __init__(self, path: str):
         self.conn = sqlite3.connect(path)
         self.conn.row_factory = sqlite3.Row
@@ -97,7 +92,6 @@ class Database:
     def _one(self, sql: str, params: tuple = ()) -> sqlite3.Row | None:
         return self.conn.execute(sql, params).fetchone()
 
-    # ---------- users ----------
     def user(self, uid: int) -> sqlite3.Row:
         self._exec("INSERT OR IGNORE INTO users(id) VALUES (?)", (uid,))
         return self._one("SELECT * FROM users WHERE id = ?", (uid,))
@@ -111,7 +105,6 @@ class Database:
     def users(self) -> list[sqlite3.Row]:
         return self._all("SELECT * FROM users")
 
-    # ---------- homework ----------
     def add_hw(self, uid: int, subject: str, text: str, deadline: int | None) -> int:
         cur = self._exec(
             "INSERT INTO homework(user_id, subject, text, deadline, created_at) VALUES (?, ?, ?, ?, ?)",
@@ -164,7 +157,6 @@ class Database:
         )
         self.conn.commit()
 
-    # ---------- ручные пары ----------
     def add_lesson(self, uid: int, weekday: int | None, day: str | None,
                    time_from: str, time_to: str, title: str, room: str) -> int:
         cur = self._exec(
@@ -187,7 +179,6 @@ class Database:
     def delete_lesson(self, uid: int, lesson_id: int) -> None:
         self._exec("DELETE FROM lessons WHERE id = ? AND user_id = ?", (lesson_id, uid))
 
-    # ---------- кэш RUZ ----------
     def cache_get(self, source: str, days: list[str]) -> dict[str, tuple[list[dict], int]]:
         marks = ",".join("?" * len(days))
         rows = self._all(
@@ -203,7 +194,6 @@ class Database:
         )
         self.conn.commit()
 
-    # ---------- оценки ----------
     def subjects(self, uid: int) -> list[sqlite3.Row]:
         return self._all("SELECT * FROM subjects WHERE user_id = ? ORDER BY name", (uid,))
 
