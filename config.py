@@ -4,7 +4,6 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 BASE_DIR = Path(__file__).resolve().parent
-# Google-таблица расписания факультета ИМиКН (1 модуль). Новый модуль — новая ссылка в .env (SHEET_URL)
 DEFAULT_SHEET_URL = "https://docs.google.com/spreadsheets/d/1GyQ6IklpcoT7Sir6C7rNU9aNErDX1HWBg7Y1EK5T-nA"
 
 
